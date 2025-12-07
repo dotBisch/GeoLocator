@@ -149,7 +149,14 @@ export const Home: React.FC = () => {
         
         {/* Map Layer (Absolute Background) */}
         <div className="absolute inset-0 z-0">
-          <Map geoData={currentData} />
+          <Map 
+            geoData={currentData} 
+            label={
+              currentData && history.some(h => h.data.ip === currentData.ip)
+                ? (history.length - history.findIndex(h => h.data.ip === currentData.ip)).toString()
+                : '★'
+            }
+          />
         </div>
 
         {/* Floating Sidebar / Overlay */}
