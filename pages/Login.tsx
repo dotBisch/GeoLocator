@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabaseService } from '../services/supabaseService';
 import { apiService } from '../services/api';
 import { Button } from '../components/Button';
 import { USER_SEEDER } from '../constants';
-import { LogIn, MapPin } from 'lucide-react';
+import { LogIn, MapPin, UserPlus } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -11,18 +12,49 @@ export const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      const user = await apiService.login(email, password);
+      let user;
+      if (isSignUp) {
+        user = await supabaseService.signUp(email, password);
+        alert('Account created! You can now log in.');
+        setIsSignUp(false);
+        setLoading(false);
+        return;
+      } else {
+        // Try Supabase first
+        try {
+          user = await supabaseService.login(email, password);
+        } catch (supaError: any) {
+          console.warn('Supabase login failed', supaError);
+          
+          // If it's a specific Supabase auth error (like "Email not confirmed"), 
+          // show it to the user instead of falling back to the mock (which would just say "Invalid credentials")
+          const isAuthError = supaError.message && (
+            supaError.message.includes('Email not confirmed') || 
+            supaError.message.includes('Invalid login credentials')
+          );
+
+          // Only fallback if it's NOT a clear auth error OR if it's the demo user (to ensure demo always works)
+          if (isAuthError && email !== USER_SEEDER.email) {
+            throw supaError;
+          }
+
+          // Fallback to mock if Supabase is not configured or if it's the demo user
+          user = await apiService.login(email, password);
+        }
+      }
+      
       localStorage.setItem('user', JSON.stringify(user));
       navigate('/home');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : 'Authentication failed');
     } finally {
       setLoading(false);
     }
@@ -47,8 +79,12 @@ export const Login: React.FC = () => {
           </div>
         </div>
         
-        <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Welcome Back</h2>
-        <p className="text-center text-gray-500 mb-8 text-sm">Please sign in to access the GeoTracker dashboard.</p>
+        <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">
+          {isSignUp ? 'Create Account' : 'Welcome Back'}
+        </h2>
+        <p className="text-center text-gray-500 mb-8 text-sm">
+          {isSignUp ? 'Sign up to start tracking locations.' : 'Please sign in to access the GeoLocator dashboard.'}
+        </p>
 
         {error && (
           <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4 border border-red-100 flex items-center">
@@ -56,7 +92,7 @@ export const Login: React.FC = () => {
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleAuth} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
             <input
@@ -82,9 +118,22 @@ export const Login: React.FC = () => {
           </div>
 
           <Button type="submit" variant="primary" className="w-full py-3 mt-2" isLoading={loading}>
-            <LogIn size={18} className="mr-2" /> Sign In
+            {isSignUp ? (
+              <><UserPlus size={18} className="mr-2" /> Sign Up</>
+            ) : (
+              <><LogIn size={18} className="mr-2" /> Sign In</>
+            )}
           </Button>
         </form>
+
+        <div className="mt-4 text-center">
+          <button 
+            onClick={() => setIsSignUp(!isSignUp)}
+            className="text-sm text-lamar-green hover:underline"
+          >
+            {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
+          </button>
+        </div>
 
         <div className="mt-6 pt-6 border-t border-gray-100">
           <p className="text-xs text-center text-gray-400 mb-2">Dev Helper</p>

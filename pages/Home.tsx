@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
+import { supabaseService } from '../services/supabaseService';
 import { GeoData, User, HistoryItem } from '../types';
 import { Map } from '../components/Map';
 import { Button } from '../components/Button';
@@ -36,19 +37,32 @@ export const Home: React.FC = () => {
       navigate('/');
       return;
     }
-    setUser(JSON.parse(storedUser));
+    const parsedUser = JSON.parse(storedUser);
+    setUser(parsedUser);
 
-    const storedHistory = localStorage.getItem('searchHistory');
-    if (storedHistory) {
-      setHistory(JSON.parse(storedHistory));
-    }
+    const loadHistory = async () => {
+      if (parsedUser.id) {
+        try {
+          const remoteHistory = await supabaseService.getHistory();
+          setHistory(remoteHistory);
+        } catch (err) {
+          console.warn('Failed to load history from Supabase, falling back to local', err);
+          const storedHistory = localStorage.getItem('searchHistory');
+          if (storedHistory) setHistory(JSON.parse(storedHistory));
+        }
+      } else {
+        const storedHistory = localStorage.getItem('searchHistory');
+        if (storedHistory) setHistory(JSON.parse(storedHistory));
+      }
+    };
+    loadHistory();
 
     // Initial fetch (Current User IP)
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync history to local storage
+  // Sync history to local storage (Backup)
   useEffect(() => {
     localStorage.setItem('searchHistory', JSON.stringify(history));
   }, [history]);
@@ -62,11 +76,28 @@ export const Home: React.FC = () => {
       
       // Add to history if it's a specific search and unique
       if (ip && !history.some(h => h.data.ip === data.ip)) {
-        const newItem: HistoryItem = {
-          id: Date.now().toString(),
-          timestamp: Date.now(),
-          data
-        };
+        let newItem: HistoryItem;
+        
+        if (user?.id) {
+          try {
+            newItem = await supabaseService.addToHistory(data);
+          } catch (err) {
+            console.error('Failed to save to Supabase', err);
+            // Fallback
+            newItem = {
+              id: Date.now().toString(),
+              timestamp: Date.now(),
+              data
+            };
+          }
+        } else {
+          newItem = {
+            id: Date.now().toString(),
+            timestamp: Date.now(),
+            data
+          };
+        }
+        
         setHistory(prev => [newItem, ...prev]);
       }
     } catch (err) {
@@ -92,7 +123,8 @@ export const Home: React.FC = () => {
     fetchData(); // Revert to user IP
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabaseService.logout();
     localStorage.removeItem('user');
     navigate('/');
   };
@@ -103,7 +135,18 @@ export const Home: React.FC = () => {
     );
   };
 
-  const deleteSelectedHistory = () => {
+  const deleteSelectedHistory = async () => {
+    if (user?.id) {
+      // Delete from Supabase
+      for (const id of selectedHistory) {
+        try {
+          await supabaseService.deleteHistory(id);
+        } catch (e) {
+          console.error('Failed to delete history item from Supabase', id, e);
+        }
+      }
+    }
+    
     setHistory(prev => prev.filter(item => !selectedHistory.includes(item.id)));
     setSelectedHistory([]);
   };
@@ -123,7 +166,7 @@ export const Home: React.FC = () => {
              <div className="border-2 border-lamar-green rounded-full p-1">
                <MapPin size={16} fill="currentColor" />
              </div>
-             <span>GEOLAMAR</span>
+             <span>GEOLOCATOR</span>
           </div>
           <button 
             onClick={() => setSidebarOpen(!sidebarOpen)}

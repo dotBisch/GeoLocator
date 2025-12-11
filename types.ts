@@ -1,7 +1,8 @@
 export interface User {
+  id?: string;
   email: string;
-  name: string;
-  token: string;
+  name?: string;
+  token?: string;
 }
 
 export interface GeoData {
@@ -17,7 +18,9 @@ export interface GeoData {
 
 export interface HistoryItem {
   id: string;
-  timestamp: number;
+  user_id?: string;
+  created_at?: string;
+  timestamp?: number; // Keeping for backward compatibility if needed
   data: GeoData;
 }
 
